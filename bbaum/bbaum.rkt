@@ -2,7 +2,7 @@
 (require pict)
 (require pict/tree-layout)
 
-(define tree0 '((3) ((1 2)) ((4 5))))
+(define tree0 '((3 8) ((1 2)) ((4 5)) ((6 7))))
 
 (define tree2 '((24)
                 ((14 20)
@@ -34,10 +34,10 @@
 	 (filter-not empty? (map (compose bbaum->node cdr) tree)))))
 
 
-; Logic:
+; Inserting:
 (define (split m target)
   (define child (cdr target))
-  (if (number? child)
+  (if (number? child) ; Inserted under leaf node.
       (list (list child) (list (car target)))
       (if (<= (length child) (+ 1 (* 2 m)))
 	  (list target)
@@ -61,6 +61,32 @@
     (if (<= (length new-tree) (+ 1 (* 2 m)))
 	new-tree
 	(split m (cons +inf.0 new-tree)))))
+
+
+(define (balance m t1 t2) empty)
+
+; Deletion:
+(define (bbaum-delete tree m element)
+  (if (= 1 (length (first tree)))
+      (filter-not (lambda (entry) (= element (first entry))) tree)
+      (let*-values ([(index) (- (index-where tree (lambda (x) (<= element (first x)))) 1)] ; TODO: index = -1
+	     [(left others) (split-at tree (max 0 index))]
+	     [(pred) (first others)]
+	     [(target-list right) (split-at (drop others (if (= index -1) 0 1)) 1)]
+	     [(target) (first target-list)]
+	     [(child) (rest target)]
+	     [(new-child) (bbaum-delete child m element)]) ; TODO: key could be element.
+	(cond [(> (length new-child) m) (append left (list pred new-child) right)]
+	      ; Ausgleich links.
+	      ; [(> (length (rest pred) (+ m 1)))
+	      ;  (append left
+		       ; (split m (cons (first new-child)
+				      ; (append (drop-right (rest pred) 1)
+					      ; (list (cons (first pred)
+							  ; (rest (last (rest pred)))))
+					      ; (rest new-child))))
+		       ; right)]
+	      ))))
 
 
 ; Rendering:
@@ -87,11 +113,11 @@
 ;            (bbaum-insert t m e))) tree elements))
 
 
-(define b1 (node->bbaum tree3))
-(render-bbaum b1)
-(define b2 (bbaum-insert b1 2 9))
-(render-bbaum b2)
-(define b3 (bbaum-insert b2 2 14))
-(render-bbaum b3)
-(define b4 (bbaum-insert b3 2 8))
-(render-bbaum b4)
+; (define b1 (node->bbaum tree3))
+; (render-bbaum b1)
+; (define b2 (bbaum-insert b1 2 9))
+; (render-bbaum b2)
+; (define b3 (bbaum-insert b2 2 14))
+; (render-bbaum b3)
+; (define b4 (bbaum-insert b3 2 8))
+; (render-bbaum b4)
