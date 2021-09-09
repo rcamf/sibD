@@ -4,11 +4,6 @@
 
 (define tree0 '((3) ((1 2)) ((4 5))))
 
-(define tree1 '((9 21 31)
-               ((1 2))
-               ((10 12 17 19))
-               ((32 35 40))))
-
 (define tree2 '((24)
                 ((14 20)
                  ((1))
@@ -24,46 +19,51 @@
                 ((35 40))
                 ((45 51))))
 
-(define (split-child child m)
-  (define content (first child))
-  (define children (rest child))
-  (let*-values ([(left-content other-content) (split-at content m)]
-                [(new-root) (first other-content)]
-                [(right-content) (rest other-content)]
-                [(left-children right-children) (if (empty? children)
-                                                    (values '() '())
-                                                    (split-at children (+ 1 m)))]
-                )
-    (values new-root (list (list* left-content left-children)
-                           (list* right-content right-children)))))
+; Conversion:
+(define (node->bbaum t)
+  (define content (append (first t) '(+inf.0)))
+  (define children (rest t))
+  (if (empty? children)
+      (map list content)
+      (map cons content (map node->bbaum children))))
 
-(define (split content m left target-child right index)
-  (if (<= (length (first target-child))  (* 2 m))
-    (append (list content) left (list target-child) right)
-    (let*-values ([(divider trees) (split-child target-child m)]
-                  [(left-content right-content) (split-at content index)])
-      (list* (append left-content (list divider) right-content)
-            (append left trees right)))))
+(define (bbaum->node tree)
+  (if (empty? tree)
+      empty
+      (list* (drop-right (map car tree) 1)
+	 (filter-not empty? (map (compose bbaum->node cdr) tree)))))
+
+
+; Logic:
+(define (split m target)
+  (define child (cdr target))
+  (if (number? child)
+      (list (list child) (list (car target)))
+      (if (<= (length child) (+ 1 (* 2 m)))
+	  (list target)
+	  (let*-values ([(left others) (split-at child m)]
+			[(middle right) (split-at others 1)])
+	    (list (cons (caar middle) (append left (list (cons +inf.0 (cdr middle)))))
+		  (cons (car target) right))))))
 
 (define (bbaum-insert-rec tree m element)
-  (define content (first tree))
-  (define children (rest tree))
-  (if (= 1 (length tree))
-      (list (sort (cons element content) <))
-      (let*-values ([(res) (index-where content (lambda (x) (> x element)))]
-                    [(index) (if (equal? #f res) (length content) res)]
-                    [(left others) (split-at children index)]
-                    [(target-child) (first others)]
-                    [(right) (rest others)])
-        (split content m left (bbaum-insert-rec target-child m element) right index))))
+  (if (null? tree)
+      element
+      (let*-values ([(left others) (splitf-at tree
+					      (lambda (entry) (> element (first entry))))]
+		    [(target right) (split-at others 1)]
+		    [(divider) (caar target)]
+		    [(new-child) (bbaum-insert-rec (cdar target) m element)])
+	(append left (split m (cons divider new-child)) right))))
 
 (define (bbaum-insert tree m element)
   (let ([new-tree (bbaum-insert-rec tree m element)])
-    (if (>= (* 2 m) (length (first new-tree)))
-        new-tree
-        (let-values ([(root children) (split-child new-tree m)])
-          (list* (list root) children)))))
+    (if (<= (length new-tree) (+ 1 (* 2 m)))
+	new-tree
+	(split m (cons +inf.0 new-tree)))))
 
+
+; Rendering:
 (define (render-node content)
   (frame (inset
           (text (string-join (map number->string content)))
@@ -77,8 +77,21 @@
 (define (render tree)
   (naive-layered (bbaum tree)))
 
-(define (insert-all tree m elements)
-  (foldl (lambda (e t)
-           (begin
-             (show-pict (render t))
-           (bbaum-insert t m e))) tree elements))
+(define (render-bbaum tree)
+  (render (bbaum->node tree)))
+
+; (define (insert-all tree m elements)
+;   (foldl (lambda (e t)
+;            (begin
+;              (show-pict (render t))
+;            (bbaum-insert t m e))) tree elements))
+
+
+(define b1 (node->bbaum tree3))
+(render-bbaum b1)
+(define b2 (bbaum-insert b1 2 9))
+(render-bbaum b2)
+(define b3 (bbaum-insert b2 2 14))
+(render-bbaum b3)
+(define b4 (bbaum-insert b3 2 8))
+(render-bbaum b4)
