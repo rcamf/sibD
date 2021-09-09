@@ -19,20 +19,30 @@
                 ((35 40))
                 ((45 51))))
 
-; Conversion:
-(define (node->bbaum t)
-  (define content (append (first t) '(+inf.0)))
-  (define children (rest t))
-  (if (empty? children)
-      (map list content)
-      (map cons content (map node->bbaum children))))
+(struct entry (key content)
+	#:transparent)
 
-(define (bbaum->node tree)
-  (if (empty? tree)
-      empty
-      (list* (drop-right (map car tree) 1)
-	 (filter-not empty? (map (compose bbaum->node cdr) tree)))))
+(define (make-leaf-entry x)
+  (entry x empty))
 
+(define (make-bbaum keys subtrees)
+  (map entry
+       (append keys '(+inf.0))
+       subtrees))
+
+(define (node->bbaum n)
+  (match n
+	 [(list leaf-keys) (map make-leaf-entry (append leaf-keys '(+inf.0)))]
+	 [(list keys children ...) (make-bbaum keys (map node->bbaum children))]))
+
+(define/match (bbaum->node tree)
+	      [((list (entry keys (list)) ... (entry +inf.0 (list)))) (list keys)]
+	      [((list (entry keys contents) ...)) (list* (drop-right keys 1)
+							 (map bbaum->node contents))])
+
+(define (splitf-around lst proc)
+  (let*-values ([(left others) (splitf-at lst (compose not proc))])
+    (values left (first others) (rest others))))
 
 ; Inserting:
 (define (split m target)
