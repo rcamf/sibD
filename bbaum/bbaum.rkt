@@ -2,7 +2,7 @@
 (require pict)
 (require pict/tree-layout)
 
-(define tree0 '((3 8) ((1 2)) ((4 5)) ((6 7))))
+(define tree0 '((3 8) ((1 2)) ((4 5)) ((10 12))))
 
 (define tree1 '((3 5 7 9)))
 
@@ -77,6 +77,53 @@
   (match (split (entry +inf.0 (bbaum-insert-rec tree m element)) m)
     [(list (entry +.inf.0 child)) child]
     [x x]))
+
+(define/match (balance m e1 e2)
+  [(m (entry k1 (list c1 ... (entry +inf.0 c1-last-child))) (entry k2 c2))
+   (match-let*-values ([(all-entries) (append c1 (list (entry k1 c1-last-child)) c2)]
+		       [(index) (- (ceiling (/ (length all-entries) 2)) 1)]
+		       [(left (entry key child) right) (split-around all-entries index)])
+     (list (entry key (append left (list (entry +inf.0 child))))
+	   (entry k2 right)))])
+
+(define/match (merge e1 e2)
+  [((entry k1 (list c1 ... (entry +inf.0 c1-last-child))) (entry k2 c2))
+   (entry k2 (append c1 (list (entry k1 c1-last-child)) c2))])
+
+
+(define (drop-sentinels tree)
+  (drop-right (rest tree) 1))
+
+(define (entry-size e)
+  (length (entry-child e)))
+
+
+; Deletion
+; TODO: Check for valid tree
+(define/match (entry-largest e)
+  [((entry _ (list _ ... (entry x '()) _))) x]
+  [((entry _ child)) (entry-largest (last child))])
+
+(define (bbaum-delete tree m element)
+  (match tree
+    [(list (entry keys '()) ...) (map make-leaf-entry (remove element keys =))]
+    [entries (match-let*-values ([(index) (index-where entries (lambda (e) (<= element (entry-key e))))]
+				 [(left (list-rest pred target succ right)) (split-at (append (list (entry #f '()))
+											      entries
+											      (list (entry #f '())))
+										      index)]
+				 [((entry key child)) target]
+				 [(new-element) (if (= key element) (entry-largest target) element)]
+				 [(new-target) (entry (if (= key element) new-element key) (bbaum-delete child m new-element))])
+	       (drop-sentinels (cond [(> (entry-size new-target) m) (append left (list pred new-target succ) right)]
+				     ; Balance with left neighbor.
+				     [(> (entry-size pred) (+ 1 m)) (append left (balance m pred new-target) (list succ) right)]
+				     ; Balance with right neighbor.
+				     [(> (entry-size succ) (+ 1 m)) (append left (list pred) (balance m new-target succ) right)]
+				     ; Merge with left neighbor.
+				     [(entry-key pred) (append left (list (merge pred new-target) succ) right)]
+				     ; Merge with right neighbor.
+				     [else (append left (list pred (merge new-target succ)) right)])))]))
 
 
 ; Rendering:
