@@ -51,6 +51,14 @@
   (let*-values ([(left others) (split-at lst pos)])
     (values left (first others) (rest others))))
 
+; Validity
+(define (bbaum-valid bbaum m)
+  (bbaum-valid-rec bbaum m 0))
+
+(define (bbaum-valid-rec bbaum m n)
+  (match bbaum
+	 [(list (entry keys '()) ...) (if (= n 0) #t ((integer-in m (* m 2)) (- (length keys) 1)))]
+	 [(list (entry keys children) ...) (and (if (= n 0) #t ((integer-in m (* m 2)) (- (length keys) 1))) (andmap (lambda (x) (bbaum-valid-rec x m (+ n 1))) children))]))
 
 ; Insertion
 (define/match (split e m)
