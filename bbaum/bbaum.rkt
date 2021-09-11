@@ -82,9 +82,11 @@
 		       succ))] ))
 
 (define (bbaum-insert tree m element)
-  (match (split (entry +inf.0 (bbaum-insert-rec tree m element)) m)
+  (if (not (bbaum-valid tree m)) "Invalid tree"
+      (let ([bbaum (match (split (entry +inf.0 (bbaum-insert-rec tree m element)) m)
     [(list (entry +.inf.0 child)) child]
-    [x x]))
+    [x x])])
+	(if (bbaum-valid bbaum m) bbaum "Error"))))
 
 (define/match (balance m e1 e2)
   [(m (entry k1 (list c1 ... (entry +inf.0 c1-last-child))) (entry k2 c2))
@@ -115,7 +117,7 @@
 (define (bbaum-delete tree m element)
   (if (not (bbaum-valid tree m)) "Invalid tree"
       (let ([bbaum (bbaum-delete-rec tree m element)])
-	(if (not (bbaum-valid bbaum m)) "Error" bbaum))))
+	(if (bbaum-valid bbaum m) bbaum "Error"))))
 
 (define (bbaum-delete-rec tree m element)
   (match tree
