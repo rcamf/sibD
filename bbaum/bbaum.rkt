@@ -51,7 +51,7 @@
   (let*-values ([(left others) (split-at lst pos)])
     (values left (first others) (rest others))))
 
-; Validity
+; Validadtion
 (define (bbaum-valid bbaum m)
   (bbaum-valid-rec bbaum m 0))
 
@@ -113,6 +113,11 @@
   [((entry _ child)) (entry-largest (last child))])
 
 (define (bbaum-delete tree m element)
+  (if (not (bbaum-valid tree m)) "Invalid tree"
+      (let ([bbaum (bbaum-delete-rec tree m element)])
+	(if (not (bbaum-valid bbaum m)) "Error" bbaum))))
+
+(define (bbaum-delete-rec tree m element)
   (match tree
     [(list (entry keys '()) ...) (map make-leaf-entry (remove element keys =))]
     [entries (match-let*-values ([(index) (index-where entries (lambda (e) (<= element (entry-key e))))]
