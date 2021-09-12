@@ -1,4 +1,5 @@
 from collections import namedtuple
+from itertools import chain
 
 schedule_input = 'r2(x) r1(y) w3(x) w2(x) r3(y) w3(y) w2(y) w2(z) a2 r1(z) w1(z) c1 w3(z) c3'
 
@@ -106,7 +107,40 @@ def st(s):
   print('ST')
   return True
       
-  
+def c2pl(s):
+    ns = []
+    delayed = []
+    locks = {}
+    remaining = s
+    while remaining:
+        op = remaining[0]
+        remaining = remaining[1:]
+        if op.action in ['a', 'c']:
+            ns += [op]
+        elif op.transaction not in locks:
+            required = [(a + 'l', x)for a, t, x in s if t == op.transaction and a not in ['c', 'a']]
+            active = list(chain.from_iterable(locks.values()))
+            for r in required:
+                if r[0] == 'wl' and r[1] in [o for a, o in active] or r[0] == 'rl' and ('wl', r[1]) in active:
+                    delayed.append(op)
+                    break
+            else:
+                ns += [Op(a, op.transaction, o) for (a, o) in required]
+                ns += [op, Op(op.action + 'u', op.transaction, op.object)]
+                # Lock for current action has already been released.
+                locks[op.transaction] = required[1:]
+                remaining = delayed + remaining
+                delayed = []
+        else:
+            # Required locks have been aquired.
+            ns += [op, Op(op.action + 'u', op.transaction, op.object)]
+            locks[op.transaction] = locks[op.transaction][1:]
+            remaining = delayed + remaining
+            delayed = []
+    return ns
+
+            
+
 
 s = parse(schedule_input)
 s2 = parse('r3(y) r3(z) w2(x) r1(y) w1(x) r2(x) r2(z) w1(y) c1 w3(x) c3 w2(y) r3(x) c2')
