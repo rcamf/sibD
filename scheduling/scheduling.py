@@ -1,4 +1,4 @@
-from collections import namedtuple
+from collections import namedtuple, defaultdict
 from itertools import chain
 
 schedule_input = 'r2(x) r1(y) w3(x) w2(x) r3(y) w3(y) w2(y) w2(z) a2 r1(z) w1(z) c1 w3(z) c3'
@@ -125,14 +125,20 @@ def st(s):
     return True
 
 
+def lock(op):
+    a, t, o = op
+    return Op(a + 'l', t, o)
+def unlock(op):
+    a, t, o = op
+    return Op(a + 'u', t, o)
+
 def c2pl(s):
     ns = []
     delayed = []
     locks = {}
-    remaining = s
+    remaining = s.copy()
     while remaining:
-        op = remaining[0]
-        remaining = remaining[1:]
+        op = remaining.pop(0)
         if op.action in ['a', 'c']:
             ns += [op]
         elif op.transaction not in locks:
@@ -147,14 +153,14 @@ def c2pl(s):
                     break
             else:
                 ns += [Op(a, op.transaction, o) for (a, o) in required]
-                ns += [op, Op(op.action + 'u', op.transaction, op.object)]
+                ns += [op, unlock(op)]
                 # Lock for current action has already been released.
                 locks[op.transaction] = required[1:]
                 remaining = delayed + remaining
                 delayed = []
         else:
             # Required locks have been aquired.
-            ns += [op, Op(op.action + 'u', op.transaction, op.object)]
+            ns += [op, unlock(op)]
             locks[op.transaction] = locks[op.transaction][1:]
             remaining = delayed + remaining
             delayed = []
@@ -165,3 +171,38 @@ s = parse(schedule_input)
 s2 = parse(
     'r3(y) r3(z) w2(x) r1(y) w1(x) r2(x) r2(z) w1(y) c1 w3(x) c3 w2(y) r3(x) c2'
 )
+
+def s2pl(s, strict=False):
+    ns = []
+    delayed = []
+    locks = defaultdict(list)
+    remaining = s.copy()
+    while remaining:
+        op = remaining.pop(0)
+        a, t, o = op
+        if a in ['a', 'c']:
+            # print(op, remaining, delayed)
+            if t in [dop.transaction for dop in delayed]:
+                delayed.append(op)
+            else:
+                ns += [op]
+                ns += [unlock(Op(la, t, lo)) for la, lo in locks[t]]
+                locks[t] = []
+                remaining = delayed + remaining
+                delayed = []
+        else:
+            active = list(chain.from_iterable(locks.values()))
+            if ('w', o) in active or (a == 'w' and ('r', o) in active) or t in [dop.transaction for dop in delayed]:
+                delayed.append(op)
+            else:
+                ns += [lock(op), op]
+                if not strict and a == 'r':
+                    ns += [unlock(op)]
+                else:
+                    locks[t].append((a, o))
+                remaining = delayed + remaining
+                delayed = []
+    if delayed:
+        return False, ns, delayed
+    else:
+        return True, ns
