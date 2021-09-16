@@ -124,44 +124,51 @@ def st(s):
     print('ST')
     return True
 
+def lockable(op, locked):
+    if op.action not in ['r', 'w']:
+        return True
+    for t, locks in locked.items():
+        if t != op.transaction:
+            for a, _, o in locks:
+                if o == op.object and not (op.action == a == 'r'):
+                    return False
+    return True
 
 def lock(op):
     a, t, o = op
     return Op(a + 'l', t, o)
+
 def unlock(op):
     a, t, o = op
     return Op(a + 'u', t, o)
 
+def actions(s, t):
+    return [op for op in s if op.transaction == t and op.action in ['r', 'w']]
+
 def c2pl(s):
     ns = []
     delayed = []
-    locks = {}
+    locked = {}
     remaining = s.copy()
     while remaining:
         op = remaining.pop(0)
         if op.action in ['a', 'c']:
             ns += [op]
-        elif op.transaction not in locks:
-            required = [(a + 'l', x) for a, t, x in s
-                        if t == op.transaction and a not in ['c', 'a']]
-            active = list(chain.from_iterable(locks.values()))
+        elif op.transaction not in locked:
+            required = actions(s, op.transaction)
             for r in required:
-                if r[0] == 'wl' and r[1] in [
-                        o for a, o in active
-                ] or r[0] == 'rl' and ('wl', r[1]) in active:
+                if not lockable(r, locked):
                     delayed.append(op)
                     break
             else:
-                ns += [Op(a, op.transaction, o) for (a, o) in required]
-                ns += [op, unlock(op)]
-                # Lock for current action has already been released.
-                locks[op.transaction] = required[1:]
-                remaining = delayed + remaining
-                delayed = []
+                ns += [lock(r) for r in required]
+                locked[op.transaction] = required
+                # Push current operation back.
+                remaining.insert(0, op)
         else:
             # Required locks have been aquired.
             ns += [op, unlock(op)]
-            locks[op.transaction] = locks[op.transaction][1:]
+            locked[op.transaction].pop(0)
             remaining = delayed + remaining
             delayed = []
     return ns
@@ -175,33 +182,26 @@ s2 = parse(
 def s2pl(s, strict=False):
     ns = []
     delayed = []
-    locks = defaultdict(list)
+    locked = defaultdict(list)
     remaining = s.copy()
     while remaining:
         op = remaining.pop(0)
         a, t, o = op
-        if a in ['a', 'c']:
-            # print(op, remaining, delayed)
-            if t in [dop.transaction for dop in delayed]:
-                delayed.append(op)
-            else:
-                ns += [op]
-                ns += [unlock(Op(la, t, lo)) for la, lo in locks[t]]
-                locks[t] = []
-                remaining = delayed + remaining
-                delayed = []
+        if actions(delayed, t) or not lockable(op, locked):
+            delayed.append(op)
+        elif a in ['a', 'c']:
+            ns += [op] + [unlock(l) for l in locked[t]]
+            locked[t] = []
+            remaining = delayed + remaining
+            delayed = []
         else:
-            active = list(chain.from_iterable(locks.values()))
-            if ('w', o) in active or (a == 'w' and ('r', o) in active) or t in [dop.transaction for dop in delayed]:
-                delayed.append(op)
+            ns += [lock(op), op]
+            if not strict and a == 'r':
+                ns += [unlock(op)]
             else:
-                ns += [lock(op), op]
-                if not strict and a == 'r':
-                    ns += [unlock(op)]
-                else:
-                    locks[t].append((a, o))
-                remaining = delayed + remaining
-                delayed = []
+                locked[t].append(op)
+            remaining = delayed + remaining
+            delayed = []
     if delayed:
         return False, ns, delayed
     else:
