@@ -1,5 +1,6 @@
 from collections import namedtuple, defaultdict
 from itertools import chain
+import re
 
 schedule_input = 'r2(x) r1(y) w3(x) w2(x) r3(y) w3(y) w2(y) w2(z) a2 r1(z) w1(z) c1 w3(z) c3'
 
@@ -16,11 +17,8 @@ def string_op(op):
 Op.__repr__ = string_op
 
 
-def parse(s_input):
-    return [
-        Op(op[0], int(op[1]), op[-2] if op[-2] != op[0] else '')
-        for op in s_input.split()
-    ]
+def parse(string):
+    return [Op(*op) for op in re.findall(r'(a|c|r|w)(\d)(?:\(([^acrw])\))?', string)]
 
 
 def aborts(s):
@@ -78,6 +76,7 @@ def reads(s):
 
 
 def rc(s):
+    print('----- Checking for RC -----')
     s_reads = reads(s)
     commited = commits(s)
     for ti, x, tj in s_reads:
@@ -94,6 +93,7 @@ def rc(s):
 
 
 def aca(s):
+    print('----- Checking for ACA -----')
     for ti, x, tj in reads(s):
         print('t{} liest {} von t{}: '.format(ti, x, tj), end='')
         index = s.index(Op('r', ti, x))
@@ -107,6 +107,7 @@ def aca(s):
 
 
 def st(s):
+    print('----- Checking for ST -----')
     commited = commits(s)
     for i, writeop in enumerate(s):
         (x, t, o) = writeop
@@ -123,6 +124,9 @@ def st(s):
                 .format(o, op_end))
     print('ST')
     return True
+
+def recoverable(s):
+    return st(s) or aca(s) or rc(s)
 
 def lockable(op, locked):
     if op.action not in ['r', 'w']:
