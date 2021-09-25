@@ -170,23 +170,36 @@ def synthesize(relation, deps):
 
     print('Endergebnis:')
     for name, attr, deps in rels:
-        print(' - R_{} := ({{{}}}, {})'.format(name, ', '.join(sorted(attr)), deps))
+        print(' - R_{} := ({{{}}}, {})'.format(name, ', '.join(sorted(attr)),
+                                               deps))
     return rels
 
 
 def decompose(relation, deps):
-    z = [(relation, deps)]
+    z = [('', frozenset(relation), deps)]
+    print('Beginne mit R := ({{{}}}, {})'.format(', '.join(sorted(relation)),
+                                                 deps))
     in_bcnf = []
     while z:
-        r, fd = z.pop(0)
+        name, r, fd = z.pop(0)
         keys = find_keys(r, fd)
         for d in fd:
             if len(d.left.intersection(
-                    d.right)) == 0 and not is_super_key(d.left):
+                    d.right)) == 0 and not is_super_key(d.left, r, fd):
+                print(
+                    'R_{} := ({{{}}}, {}) ist nicht in BCNF, aufgrund von {}, da {} kein Superschlüssel ist.'
+                    .format(name, ', '.join(sorted(r)), fd, d, ''.join(sorted(d.left))))
                 x1 = d.left | d.right
-                r1 = (x1, [f for f in fd if (fd.left | fd.right) <= x1])
+                fd1 = [f for f in fd if (f.left | f.right) <= x1]
+                name1 = name + '1'
+                r1 = (name1, x1, fd1)
+                print('Zerlege in:')
+                print('- R_{} := ({{{}}}, {})'.format(name1, ', '.join(sorted(x1)), fd1))
                 x2 = r - d.right
-                r2 = (x2, [f for f in fd if (fd.left | fd.right) <= x2])
+                fd2 = [f for f in fd if (f.left | f.right) <= x2]
+                name2 = name + '2'
+                r2 = (name2, x2, fd2)
+                print('- R_{} := ({{{}}}, {})'.format(name2, ', '.join(sorted(x2)), fd2))
                 # Check if both dependencies add up to fd to see whether the decomposition is lossless.
                 z.append(r1)
                 z.append(r2)
