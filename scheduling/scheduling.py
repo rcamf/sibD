@@ -154,11 +154,11 @@ def c2pl(s):
     delayed = []
     locked = {}
     remaining = s.copy()
+    commits = {op.transaction: op for op in remaining if op.action in ['a', 'c']}
+    remaining = [op for op in remaining if op not in commits.values()]
     while remaining:
         op = remaining.pop(0)
-        if op.action in ['a', 'c']:
-            ns += [op]
-        elif op.transaction not in locked:
+        if op.transaction not in locked:
             required = actions(s, op.transaction)
             for r in required:
                 if not lockable(r, locked):
@@ -173,6 +173,8 @@ def c2pl(s):
             # Required locks have been aquired.
             ns += [op, unlock(op)]
             locked[op.transaction].pop(0)
+            if len(locked[op.transaction]) == 0:
+                ns += [commits[op.transaction]]
             remaining = delayed + remaining
             delayed = []
     return ns
@@ -194,7 +196,7 @@ def s2pl(s, strict=False):
         if actions(delayed, t) or not lockable(op, locked):
             delayed.append(op)
         elif a in ['a', 'c']:
-            ns += [op] + [unlock(l) for l in locked[t]]
+            ns += [unlock(l) for l in locked[t]] + [op]
             locked[t] = []
             remaining = delayed + remaining
             delayed = []
