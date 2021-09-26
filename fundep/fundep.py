@@ -61,6 +61,7 @@ def find_keys(relation, deps):
 def canonical_cover(deps):
     remaining = deps.copy()
     left_reduced = []
+    print('Linksreduktion:')
     while remaining:
         d = remaining[0]
         # print('Betrachte {}'.format(d))
@@ -69,18 +70,19 @@ def canonical_cover(deps):
             # print('Hülle ohne {}: {}'.format(a, closure(left - {a}, remaining + final)))
             if right <= closure(left - {a}, remaining + left_reduced):
                 new_dep = Dep(left - {a}, right)
-                print('{} ist linksreduzierbar um {} zu {}.'.format(
+                print('- {} ist reduzierbar um {} zu {}.'.format(
                     d, a, new_dep))
                 remaining.insert(1, new_dep)
                 break
         else:
             # Non-reducible
-            print('{} ist nicht linksreduzierbar.'.format(d))
+            print('- {} ist nicht reduzierbar.'.format(d))
             left_reduced.append(d)
         remaining.pop(0)
 
     remaining = left_reduced
     right_reduced = []
+    print('Rechtsreduktion:')
     while remaining:
         d = remaining.pop(0)
         left, right = d
@@ -89,24 +91,36 @@ def canonical_cover(deps):
                     left,
                     remaining + right_reduced + [Dep(left, right - {b})]):
                 new_dep = Dep(left, right - {b})
-                print('{} ist rechtsreduzierbar um {} zu {}.'.format(
+                print('- {} ist reduzierbar um {} zu {}.'.format(
                     d, b, new_dep))
                 remaining.insert(0, new_dep)
                 break
         else:
-            print('{} ist nicht rechtsreduzierbar.'.format(d))
+            print('- {} ist nicht reduzierbar.'.format(d))
             right_reduced.append(d)
 
-    remaining = [dep for dep in right_reduced if dep.right != set()]
+    print('Entferne leere Abhaengigkeiten:')
+    remaining = []
+    for dep in right_reduced:
+        if dep.right != set():
+            remaining.append(dep)
+        else:
+            print('- {} geloescht.'.format(dep))
     final = []
+    print('Zusammenfassung der Abhaengigkeiten:')
     while remaining:
         left, right = remaining.pop(0)
         new_right = right
+        output = '- {}, '.format(Dep(left, right))
         for dep in remaining:
             if dep.left == left:
                 new_right = new_right | dep.right
+                output += '{}, '.format(dep)
                 remaining.remove(dep)
         final.append(Dep(left, new_right))
+        if right != new_right:
+            output = output[:-2] + ' wird zusammengefasst zu {}'.format(Dep(left, new_right))
+            print(output)
     return final
 
 
@@ -142,6 +156,7 @@ def synthesize(relation, deps):
 
     # Step 3
     keys = find_keys(relation, deps)
+    keys.sort(key=lambda k: ''.join(sorted(k)))
     if not any(key <= r.attrs for r in rels for key in keys):
         print('Keine Relation enthält einen Schlüsselkandidaten.')
         key = keys[0]
