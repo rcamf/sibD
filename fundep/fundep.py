@@ -200,7 +200,7 @@ def decompose(relation, deps):
         keys = find_keys(r, fd)
         for d in fd:
             if len(d.left.intersection(
-                    d.right)) == 0 and not is_super_key(d.left, r, fd):
+                    d.right)) == 0 and not is_super_key(d.left, r, deps):
                 print(
                     'R_{} := ({{{}}}, {}) ist nicht in BCNF, aufgrund von {}, da {} kein Superschlüssel ist.'
                     .format(name, ', '.join(sorted(r)), fd, d, ''.join(sorted(d.left))))
@@ -220,5 +220,7 @@ def decompose(relation, deps):
                 z.append(r2)
                 break
         else:
-            in_bcnf.append((r, fd))
+
+            new_deps = [Dep(d.left, r - d.left) for d in fd]
+            in_bcnf.append((r, new_deps))
     return in_bcnf
