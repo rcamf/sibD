@@ -1,3 +1,22 @@
+"""
+Usage guide:
+
+Input needs to be in this format:
+input_schedule = 'r2(x) r1(y) w3(x) w2(x) r3(y) w3(y) w2(y) w2(z) a2 r1(z) w1(z) c1 w3(z) c3'
+
+Try to adjust the `parse` yourself if this does not work.
+
+Use
+> c2pl(input_schedule)
+or
+> s2pl(input_schedule)      # optionally pass strict=True as a keyword argument
+to apply the scheduling method.
+
+To check for recoverability of the schedule (i.e. if it is in ST, ACA or RC) use
+> recoverable(input_schedule)
+
+Don't blame me if something is not correct :)
+"""
 from collections import namedtuple, defaultdict
 from itertools import chain
 import re
@@ -18,17 +37,28 @@ Op.__repr__ = string_op
 
 
 def parse(string):
-    return [Op(*op) for op in re.findall(r'(a|c|r|w)(\d)(?:\(([^acrw])\))?', string)]
+    return [Op(*op) for op in re.findall(r'(a|c|r|w)(\d)(?:\((\w)\))?', string)]
+
+def parse_when_necessary(fun):
+    def f(s, *args, **kwargs):
+        if isinstance(s, str):
+            return fun(parse(s), *args, **kwargs)
+        else:
+            return fun(s, *args, **kwargs)
+    return f
 
 
+@parse_when_necessary
 def aborts(s):
     return [op.transaction for op in s if op.action == 'a']
 
 
+@parse_when_necessary
 def commits(s):
     return [op.transaction for op in s if op.action == 'c']
 
 
+@parse_when_necessary
 def conf(s):
     commited = [t for (x, t, _) in s if x == 'c']
     ops = [Op(x, t, o) for (x, t, o) in s if t in commited and x != 'c']
@@ -43,9 +73,10 @@ def conf(s):
 
 
 def conf_equivalent(s1, s2):
-    pass
+    raise NotImplementedError()
 
 
+@parse_when_necessary
 def display_confgraph(s):
     import graphviz
 
@@ -60,6 +91,7 @@ def display_confgraph(s):
     dot.render(view=True)
 
 
+@parse_when_necessary
 def reads(s):
     ops = list(reversed(s))
     reads = []
@@ -75,6 +107,7 @@ def reads(s):
     return list(reversed(reads))
 
 
+@parse_when_necessary
 def rc(s):
     print('----- Checking for RC -----')
     s_reads = reads(s)
@@ -106,6 +139,7 @@ def aca(s):
     return True
 
 
+@parse_when_necessary
 def st(s):
     print('----- Checking for ST -----')
     commited = commits(s)
@@ -125,6 +159,7 @@ def st(s):
     print('ST')
     return True
 
+@parse_when_necessary
 def recoverable(s):
     return st(s) or aca(s) or rc(s)
 
@@ -146,9 +181,11 @@ def unlock(op):
     a, t, o = op
     return Op(a + 'u', t, o)
 
+@parse_when_necessary
 def actions(s, t):
     return [op for op in s if op.transaction == t and op.action in ['r', 'w']]
 
+@parse_when_necessary
 def c2pl(s):
     ns = []
     delayed = []
@@ -185,6 +222,7 @@ s2 = parse(
     'r3(y) r3(z) w2(x) r1(y) w1(x) r2(x) r2(z) w1(y) c1 w3(x) c3 w2(y) r3(x) c2'
 )
 
+@parse_when_necessary
 def s2pl(s, strict=False):
     ns = []
     delayed = []
