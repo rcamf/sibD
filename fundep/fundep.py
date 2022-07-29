@@ -58,10 +58,11 @@ def find_keys(relation, deps):
     return [frozenset(key) for key in rec(frozenset(relation))]
 
 
-def canonical_cover(deps):
+def canonical_cover(deps, silent=False):
     remaining = deps.copy()
     left_reduced = []
-    print('Linksreduktion:')
+    if not silent:
+        print('Linksreduktion:')
     while remaining:
         d = remaining[0]
         # print('Betrachte {}'.format(d))
@@ -70,19 +71,22 @@ def canonical_cover(deps):
             # print('Hülle ohne {}: {}'.format(a, closure(left - {a}, remaining + final)))
             if right <= closure(left - {a}, remaining + left_reduced):
                 new_dep = Dep(left - {a}, right)
-                print('- {} ist reduzierbar um {} zu {}.'.format(
-                    d, a, new_dep))
+                if not silent:
+                    print('- {} ist reduzierbar um {} zu {}.'.format(
+                        d, a, new_dep))
                 remaining.insert(1, new_dep)
                 break
         else:
             # Non-reducible
-            print('- {} ist nicht reduzierbar.'.format(d))
+            if not silent:
+                print('- {} ist nicht reduzierbar.'.format(d))
             left_reduced.append(d)
         remaining.pop(0)
 
     remaining = left_reduced
     right_reduced = []
-    print('Rechtsreduktion:')
+    if not silent:
+        print('Rechtsreduktion:')
     while remaining:
         d = remaining.pop(0)
         left, right = d
@@ -91,28 +95,33 @@ def canonical_cover(deps):
                     left,
                     remaining + right_reduced + [Dep(left, right - {b})]):
                 new_dep = Dep(left, right - {b})
-                print('- {} ist reduzierbar um {} zu {}.'.format(
-                    d, b, new_dep))
+                if not silent:
+                    print('- {} ist reduzierbar um {} zu {}.'.format(
+                        d, b, new_dep))
                 remaining.insert(0, new_dep)
                 break
         else:
-            print('- {} ist nicht reduzierbar.'.format(d))
+            if not silent:
+                print('- {} ist nicht reduzierbar.'.format(d))
             right_reduced.append(d)
 
-    print('Entferne leere Abhaengigkeiten:')
+    if not silent:
+        print('Entferne leere Abhaengigkeiten:')
     remaining = []
     for dep in right_reduced:
         if dep.right != set():
             remaining.append(dep)
         else:
-            print('- {} geloescht.'.format(dep))
+            if not silent:
+                print('- {} geloescht.'.format(dep))
     final = []
-    print('Zusammenfassung der Abhaengigkeiten:')
+    if not silent:
+        print('Zusammenfassung der Abhaengigkeiten:')
     while remaining:
         left, right = remaining.pop(0)
         new_right = right
         output = '- {}, '.format(Dep(left, right))
-        for dep in remaining:
+        for dep in remaining.copy():
             if dep.left == left:
                 new_right = new_right | dep.right
                 output += '{}, '.format(dep)
@@ -120,7 +129,8 @@ def canonical_cover(deps):
         final.append(Dep(left, new_right))
         if right != new_right:
             output = output[:-2] + ' wird zusammengefasst zu {}'.format(Dep(left, new_right))
-            print(output)
+            if not silent:
+                print(output)
     return final
 
 
@@ -190,6 +200,14 @@ def synthesize(relation, deps):
     return rels
 
 
+def filter_dependencies(deps, attributes):
+    return [
+        Dep(left, right & attributes)
+        for (left, right) in canonical_cover(deps, silent=True)
+        if left <= attributes and (right & attributes)
+    ]
+
+
 def decompose(relation, deps):
     z = [('', frozenset(relation), deps)]
     print('Beginne mit R := ({{{}}}, {})'.format(', '.join(sorted(relation)),
@@ -199,19 +217,18 @@ def decompose(relation, deps):
         name, r, fd = z.pop(0)
         keys = find_keys(r, fd)
         for d in fd:
-            if len(d.left.intersection(
-                    d.right)) == 0 and not is_super_key(d.left, r, deps):
+           if len(d.left.intersection(d.right)) == 0 and not is_super_key(d.left, r, deps):
                 print(
                     'R_{} := ({{{}}}, {}) ist nicht in BCNF, aufgrund von {}, da {} kein Superschlüssel ist.'
                     .format(name, ', '.join(sorted(r)), fd, d, ''.join(sorted(d.left))))
                 x1 = d.left | d.right
-                fd1 = [f for f in fd if (f.left | f.right) <= x1]
+                fd1 = filter_dependencies(fd, x1) # [f for f in fd if (f.left | f.right) <= x1]
                 name1 = name + '1'
                 r1 = (name1, x1, fd1)
                 print('Zerlege in:')
                 print('- R_{} := ({{{}}}, {})'.format(name1, ', '.join(sorted(x1)), fd1))
                 x2 = r - d.right
-                fd2 = [f for f in fd if (f.left | f.right) <= x2]
+                fd2 = filter_dependencies(fd, x2) # [f for f in fd if (f.left | f.right) <= x2]
                 name2 = name + '2'
                 r2 = (name2, x2, fd2)
                 print('- R_{} := ({{{}}}, {})'.format(name2, ', '.join(sorted(x2)), fd2))
