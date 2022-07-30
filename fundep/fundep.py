@@ -1,3 +1,103 @@
+"""
+Usage:
+
+>>> from fundep import *
+
+# Funktionale Abhängigkeiten parsen
+# Parser ist recht großzügig: Es kann → oder -> verwendet werden,
+# Attribute müssen Großbuchstaben sein, alles sonstige (wie z.B. die Zahlen im Beispiel)
+# wird ignoriert.
+>>> d = parse_deps('''
+... A → BC (1)
+... AC → DE (2)
+... AG → E (3)
+... BD → A (4)
+... EG → D
+... ''')
+>>> print(d)
+[A→BC, AC→DE, AG→E, BD→A, EG→D]
+
+# Kanonische Überdeckung berechnen
+>>> canonical_cover(d)
+Linksreduktion:
+- A→BC ist nicht reduzierbar.
+- AC→DE ist reduzierbar um C zu A→DE.
+- A→DE ist nicht reduzierbar.
+- AG→E ist reduzierbar um G zu A→E.
+- A→E ist nicht reduzierbar.
+- BD→A ist nicht reduzierbar.
+- EG→D ist nicht reduzierbar.
+Rechtsreduktion:
+- A→BC ist nicht reduzierbar.
+- A→DE ist reduzierbar um E zu A→D.
+- A→D ist nicht reduzierbar.
+- A→E ist nicht reduzierbar.
+- BD→A ist nicht reduzierbar.
+- EG→D ist nicht reduzierbar.
+Entferne leere Abhaengigkeiten:
+Zusammenfassung der Abhaengigkeiten:
+- A→BC, A→D, A→E wird zusammengefasst zu A→BCDE
+[A→BCDE, BD→A, EG→D]
+
+# Attributhülle berechnen
+>>> closure('A', d)
+ABCDE
+
+# Schlüsselkandidaten finden. (Erstes Argument ist die Menge aller Attribute).
+>>> find_keys('ABCDEG', d)
+[AG, BEG, BDG]
+
+
+# Dekompositionsalgorithmus (Erstes Argument ist die Menge aller Attribute).
+>>> decompose('ABCDEG', d)
+Beginne mit R := ({A, B, C, D, E, G}, [A→BC, AC→DE, AG→E, BD→A, EG→D])
+R_ := ({A, B, C, D, E, G}, [A→BC, AC→DE, AG→E, BD→A, EG→D]) ist nicht in BCNF, aufgrund von A→BC, da A kein Superschlüssel ist.
+Zerlege in:
+- R_1 := ({A, B, C}, [A→BC])
+- R_2 := ({A, D, E, G}, [A→DE, EG→D])
+R_2 := ({A, D, E, G}, [A→DE, EG→D]) ist nicht in BCNF, aufgrund von A→DE, da A kein Superschlüssel ist.
+Zerlege in:
+- R_21 := ({A, D, E}, [A→DE])
+- R_22 := ({A, G}, [])
+[(ABC, [A→BC]), (ADE, [A→DE]), (AG, [])]
+
+# Synthesealgorithmus (Erstes Argument ist die Menge aller Attribute).
+>>> synthesize('ABCDEG', d)
+Bilden der kanonischen Überdeckung:
+Linksreduktion:
+- A→BC ist nicht reduzierbar.
+- AC→DE ist reduzierbar um C zu A→DE.
+- A→DE ist nicht reduzierbar.
+- AG→E ist reduzierbar um G zu A→E.
+- A→E ist nicht reduzierbar.
+- BD→A ist nicht reduzierbar.
+- EG→D ist nicht reduzierbar.
+Rechtsreduktion:
+- A→BC ist nicht reduzierbar.
+- A→DE ist reduzierbar um E zu A→D.
+- A→D ist nicht reduzierbar.
+- A→E ist nicht reduzierbar.
+- BD→A ist nicht reduzierbar.
+- EG→D ist nicht reduzierbar.
+Entferne leere Abhaengigkeiten:
+Zusammenfassung der Abhaengigkeiten:
+- A→BC, A→D, A→E wird zusammengefasst zu A→BCDE
+Zwischenergebnis: [A→BCDE, BD→A, EG→D]
+Relationenschemata bilden:
+- Aus A→BCDE bilde eine Relation R_ABCDE := ({A, B, C, D, E}, [A→BCDE, BD→A])
+- Aus BD→A bilde eine Relation R_BDA := ({A, B, D}, [BD→A])
+- Aus EG→D bilde eine Relation R_EGD := ({D, E, G}, [EG→D])
+Keine Relation enthält einen Schlüsselkandidaten.
+Erzeuge aus Schlüsselkandidat {A, G} neue Relation R_AG := ({A, G}, [AG→AG])
+Die Attribute von R_BDA sind in R_ABCDE enthalten; Entferne R_BDA
+Endergebnis:
+ - R_ABCDE := ({A, B, C, D, E}, [A→BCDE, BD→A])
+ - R_EGD := ({D, E, G}, [EG→D])
+ - R_AG := ({A, G}, [AG→AG])
+[(ABCDE, [A→BCDE, BD→A]), (DEG, [EG→D]), (AG, [AG→AG])]
+
+"""
+
 from collections import namedtuple
 import re
 from string import ascii_uppercase
@@ -12,6 +112,10 @@ def dep_to_str(d):
 
 
 Dep.__repr__ = dep_to_str
+
+class Attr(frozenset):
+    def __repr__(self):
+        return ''.join(sorted(self))
 
 
 def parse_deps(s):
@@ -33,8 +137,8 @@ def closure(attributes, deps):
                 unused.remove(dep)
                 break
         else:
-            return values
-    return values
+            return Attr(values)
+    return Attr(values)
 
 
 def is_super_key(candidate, attributes, deps):
@@ -49,13 +153,14 @@ def is_key(candidate, attributes, deps):
 def find_keys(relation, deps):
     def rec(attributes):
         if is_super_key(attributes, relation, deps):
-            return frozenset.union(
+            key = frozenset.union(
                 *[rec(attributes - frozenset({x}))
                   for x in attributes]) or frozenset({attributes})
+            return Attr(key)
         else:
             return frozenset()
 
-    return [frozenset(key) for key in rec(frozenset(relation))]
+    return [Attr(key) for key in rec(frozenset(relation))]
 
 
 def canonical_cover(deps, silent=False):
@@ -136,15 +241,6 @@ def canonical_cover(deps, silent=False):
 
 Rel = namedtuple('Rel', ['name', 'attrs', 'deps'])
 
-# def to2NF(relation, deps):
-#     key_candidates = find_keys(relation, deps)
-#     npas = set(relation) - frozenset.union(*key_candidates)
-#     # Find all true subsets of candidate keys
-#     print(key_candidates)
-#     part_keys = frozenset.union(*(frozenset(powerset(key)) for key in key_candidates)) - frozenset(key_candidates)
-#     return part_keys
-
-
 def synthesize(relation, deps):
     # Step 1
     print('Bilden der kanonischen Überdeckung:')
@@ -197,7 +293,7 @@ def synthesize(relation, deps):
     for name, attr, deps in rels:
         print(' - R_{} := ({{{}}}, {})'.format(name, ', '.join(sorted(attr)),
                                                deps))
-    return rels
+    return [(Attr(attr), deps) for (name, attr, deps) in rels ]
 
 
 def filter_dependencies(deps, attributes):
@@ -209,7 +305,7 @@ def filter_dependencies(deps, attributes):
 
 
 def decompose(relation, deps):
-    z = [('', frozenset(relation), deps)]
+    z = [('', Attr(relation), deps)]
     print('Beginne mit R := ({{{}}}, {})'.format(', '.join(sorted(relation)),
                                                  deps))
     in_bcnf = []
@@ -224,13 +320,13 @@ def decompose(relation, deps):
                 x1 = d.left | d.right
                 fd1 = filter_dependencies(fd, x1) # [f for f in fd if (f.left | f.right) <= x1]
                 name1 = name + '1'
-                r1 = (name1, x1, fd1)
+                r1 = (name1, Attr(x1), fd1)
                 print('Zerlege in:')
                 print('- R_{} := ({{{}}}, {})'.format(name1, ', '.join(sorted(x1)), fd1))
                 x2 = r - d.right
                 fd2 = filter_dependencies(fd, x2) # [f for f in fd if (f.left | f.right) <= x2]
                 name2 = name + '2'
-                r2 = (name2, x2, fd2)
+                r2 = (name2, Attr(x2), fd2)
                 print('- R_{} := ({{{}}}, {})'.format(name2, ', '.join(sorted(x2)), fd2))
                 # Check if both dependencies add up to fd to see whether the decomposition is lossless.
                 z.append(r1)
